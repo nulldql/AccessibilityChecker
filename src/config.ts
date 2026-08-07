@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { WcagLevel } from "./wcag.js";
 
 export type Severity = "minor" | "moderate" | "serious" | "critical";
 
 export const SEVERITY_ORDER: Severity[] = ["minor", "moderate", "serious", "critical"];
+export const WCAG_LEVELS: WcagLevel[] = ["A", "AA", "AAA"];
 
 export type Config = {
   urls: string[];
@@ -12,6 +14,8 @@ export type Config = {
   color: boolean;
   failOn: Severity;
   ignore: string[];
+  categories: string[];
+  wcagLevel: WcagLevel | null;
   timeout: number;
 };
 
@@ -21,6 +25,8 @@ const DEFAULTS: Omit<Config, "urls"> = {
   color: true,
   failOn: "minor",
   ignore: [],
+  categories: [],
+  wcagLevel: null,
   timeout: 30000,
 };
 
@@ -40,20 +46,27 @@ function isSeverity(value: string): value is Severity {
   return (SEVERITY_ORDER as string[]).includes(value);
 }
 
+function isWcagLevel(value: string): value is WcagLevel {
+  return (WCAG_LEVELS as string[]).includes(value);
+}
+
 export function printHelp() {
   console.log(`
 plain-a11y <url> [urls...] [options]
 
 Options:
-  --json              Output machine-readable JSON instead of a report
-  --verbose           Show every affected element, not just one example
-  --no-color          Disable ANSI colors in the report
-  --fail-on <level>   Only exit non-zero for this severity or above
-                       (minor | moderate | serious | critical, default: minor)
-  --ignore <ruleId>   Skip a specific axe-core rule (repeatable)
-  --timeout <ms>      Page load timeout in milliseconds (default: 30000)
-  --help              Show this message
-  --version           Print the installed version
+  --json               Output machine-readable JSON instead of a report
+  --verbose            Show every affected element, not just one example
+  --no-color           Disable ANSI colors in the report
+  --fail-on <level>    Only exit non-zero for this severity or above
+                        (minor | moderate | serious | critical, default: minor)
+  --ignore <ruleId>    Skip a specific axe-core rule (repeatable)
+  --category <name>    Only report this category (repeatable), e.g. "Images"
+  --wcag-level <level> Only report issues tagged at this WCAG level (A | AA | AAA)
+  --timeout <ms>       Page load timeout in milliseconds (default: 30000)
+  --list-rules         Print every rule id this tool understands and exit
+  --help               Show this message
+  --version            Print the installed version
 
 Config file:
   Any of the above (except urls) can be set as defaults in a
@@ -64,8 +77,16 @@ Examples:
   plain-a11y https://example.com
   plain-a11y https://example.com --json > report.json
   plain-a11y https://a.com https://b.com --fail-on serious
-  plain-a11y https://example.com --ignore color-contrast --verbose
+  plain-a11y https://example.com --category Forms --category Images
+  plain-a11y https://example.com --wcag-level AA
 `);
+}
+
+export async function readPackageVersion(): Promise<string> {
+  const pkg = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf-8"),
+  );
+  return pkg.version;
 }
 
 export async function parseArgs(argv: string[]): Promise<Config | null> {
@@ -76,7 +97,9 @@ export async function parseArgs(argv: string[]): Promise<Config | null> {
   let color = fileConfig.color ?? DEFAULTS.color;
   let failOn = fileConfig.failOn ?? DEFAULTS.failOn;
   let timeout = fileConfig.timeout ?? DEFAULTS.timeout;
+  let wcagLevel = fileConfig.wcagLevel ?? DEFAULTS.wcagLevel;
   const ignore = [...(fileConfig.ignore ?? DEFAULTS.ignore)];
+  const categories = [...(fileConfig.categories ?? DEFAULTS.categories)];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -86,10 +109,12 @@ export async function parseArgs(argv: string[]): Promise<Config | null> {
       return null;
     }
     if (arg === "--version" || arg === "-v") {
-      const pkg = JSON.parse(
-        await readFile(new URL("../package.json", import.meta.url), "utf-8"),
-      );
-      console.log(pkg.version);
+      console.log(await readPackageVersion());
+      return null;
+    }
+    if (arg === "--list-rules") {
+      const { knownRuleIds } = await import("./rules/index.js");
+      for (const id of knownRuleIds()) console.log(id);
       return null;
     }
     if (arg === "--json") {
@@ -118,6 +143,20 @@ export async function parseArgs(argv: string[]): Promise<Config | null> {
       ignore.push(value);
       continue;
     }
+    if (arg === "--category") {
+      const value = argv[++i];
+      if (!value) throw new Error("--category needs a category name");
+      categories.push(value);
+      continue;
+    }
+    if (arg === "--wcag-level") {
+      const value = argv[++i];
+      if (!value || !isWcagLevel(value)) {
+        throw new Error(`--wcag-level needs one of: ${WCAG_LEVELS.join(", ")}`);
+      }
+      wcagLevel = value;
+      continue;
+    }
     if (arg === "--timeout") {
       const value = argv[++i];
       const parsed = Number(value);
@@ -138,5 +177,5 @@ export async function parseArgs(argv: string[]): Promise<Config | null> {
     return null;
   }
 
-  return { urls, json, verbose, color, failOn, ignore, timeout };
+  return { urls, json, verbose, color, failOn, ignore, categories, wcagLevel, timeout };
 }

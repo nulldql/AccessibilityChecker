@@ -1,5 +1,6 @@
 import type { Result } from "axe-core";
-import { categoryOrder, translate, type Category } from "./translate.js";
+import { categoryOrder, translate, type Category } from "./rules/index.js";
+import { criteriaFromTags, formatCriteria, type WcagLevel } from "./wcag.js";
 import { SEVERITY_ORDER, type Config, type Severity } from "./config.js";
 
 type AxeViolation = Result;
@@ -34,10 +35,29 @@ function groupByCategory(violations: AxeViolation[]) {
   return groups;
 }
 
-export function filterViolations(violations: AxeViolation[], ignore: string[]): AxeViolation[] {
-  if (ignore.length === 0) return violations;
-  const ignored = new Set(ignore);
-  return violations.filter((v) => !ignored.has(v.id));
+export function filterViolations(
+  violations: AxeViolation[],
+  options: { ignore?: string[]; categories?: string[]; wcagLevel?: WcagLevel | null },
+): AxeViolation[] {
+  const ignore = new Set(options.ignore ?? []);
+  const categories = new Set(options.categories ?? []);
+  const wcagLevel = options.wcagLevel ?? null;
+
+  return violations.filter((v) => {
+    if (ignore.has(v.id)) return false;
+
+    if (categories.size > 0) {
+      const plain = translate(v.id, v.help);
+      if (!categories.has(plain.category)) return false;
+    }
+
+    if (wcagLevel) {
+      const criteria = criteriaFromTags(v.tags ?? []);
+      if (!criteria.some((c) => c.level === wcagLevel)) return false;
+    }
+
+    return true;
+  });
 }
 
 export function severityCounts(violations: AxeViolation[]): Record<Severity, number> {
@@ -78,6 +98,7 @@ export function toJson(url: string, violations: AxeViolation[]) {
     severityCounts: severityCounts(violations),
     issues: violations.map((violation) => {
       const plain = translate(violation.id, violation.help);
+      const criteria = criteriaFromTags(violation.tags ?? []);
       return {
         ruleId: violation.id,
         category: plain.category,
@@ -86,6 +107,7 @@ export function toJson(url: string, violations: AxeViolation[]) {
         fix: plain.fix,
         impact: violation.impact ?? "minor",
         helpUrl: violation.helpUrl,
+        wcag: criteria,
         elements: violation.nodes.map((n) => ({ html: n.html, target: n.target })),
       };
     }),
@@ -137,12 +159,16 @@ export function printReport(url: string, violations: AxeViolation[], config: Con
       const plain = translate(violation.id, violation.help);
       const impact = violation.impact ?? "minor";
       const impactColor = c(IMPACT_COLOR[impact] ?? CYAN);
+      const criteria = criteriaFromTags(violation.tags ?? []);
 
       lines.push(
         `  ${impactColor}●${c(RESET)} ${plain.title} ${c(DIM)}(${impact}, ${violation.nodes.length} element${violation.nodes.length === 1 ? "" : "s"}, rule: ${violation.id})${c(RESET)}`,
       );
       lines.push(`    ${plain.why}`);
       lines.push(`    ${c(DIM)}Fix:${c(RESET)} ${plain.fix}`);
+      if (criteria.length > 0) {
+        lines.push(`    ${c(DIM)}WCAG:${c(RESET)} ${formatCriteria(criteria)}`);
+      }
 
       const nodesToShow = config.verbose ? violation.nodes : violation.nodes.slice(0, 1);
       for (const node of nodesToShow) {

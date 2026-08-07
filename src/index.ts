@@ -17,7 +17,7 @@ async function scanUrl(browser: import("playwright").Browser, url: string, timeo
   const page = await context.newPage();
 
   try {
-    await page.goto(url, { waitUntil: "networkidle", timeout });
+    await page.goto(url, { waitUntil: "load", timeout });
   } catch (err) {
     await context.close();
     throw new Error(`Couldn't load ${url}: ${(err as Error).message}`);
@@ -63,7 +63,11 @@ async function main() {
       continue;
     }
 
-    violations = filterViolations(violations, config.ignore);
+    violations = filterViolations(violations, {
+      ignore: config.ignore,
+      categories: config.categories,
+      wcagLevel: config.wcagLevel,
+    });
 
     if (meetsFailThreshold(violations, config.failOn)) {
       shouldFail = true;
