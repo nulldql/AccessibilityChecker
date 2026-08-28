@@ -6,10 +6,18 @@ Most accessibility scanners assume you already know WCAG by heart. They dump a l
 
 ## Install
 
+This hasn't been published to npm yet, so for now clone it and run it directly:
+
 ```bash
-npm install -g plain-a11y
+git clone https://github.com/nulldql/AccessibilityChecker.git
+cd AccessibilityChecker
+npm install
 npx playwright install chromium
+npm run build
+node dist/index.js <input>
 ```
+
+Once it's published, the plan is for `npm install -g plain-a11y` to work the same way without cloning anything.
 
 ## Usage
 
@@ -105,7 +113,7 @@ I noticed a lot of developers just ignore accessibility tooling because the outp
 ## Development
 
 ```bash
-git clone https://github.com/TheCEO3-rgb/AccessibilityChecker.git
+git clone https://github.com/nulldql/AccessibilityChecker.git
 cd AccessibilityChecker
 npm install
 npx playwright install chromium
