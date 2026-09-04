@@ -117,7 +117,19 @@ test("cli --category filters the report to one category", async () => {
 test("cli exits 1 with a clear message for an invalid url", async () => {
   const result = await runCli(["not-a-url"]);
   assert.equal(result.status, 1);
-  assert.match(result.stderr + result.stdout, /isn't valid/);
+  assert.match(result.stderr + result.stdout, /isn't a valid URL/);
+});
+
+test("cli still scans the valid urls when one url in the list is malformed", async () => {
+  const { server, url } = await startServer(CLEAN_PAGE);
+  try {
+    const result = await runCli([url, "not-a-url", "--no-color"]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /"not-a-url" isn't a valid URL/);
+    assert.match(result.stdout, new RegExp(url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  } finally {
+    server.close();
+  }
 });
 
 test("cli --help exits 0 without needing a url", async () => {

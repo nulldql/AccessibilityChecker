@@ -32,22 +32,63 @@ const DEFAULTS: Omit<Config, "urls"> = {
 
 type FileConfig = Partial<Omit<Config, "urls">>;
 
-async function loadConfigFile(): Promise<FileConfig> {
-  const path = resolve(process.cwd(), ".plaina11yrc.json");
-  try {
-    const raw = await readFile(path, "utf-8");
-    return JSON.parse(raw) as FileConfig;
-  } catch {
-    return {};
-  }
-}
-
 function isSeverity(value: string): value is Severity {
   return (SEVERITY_ORDER as string[]).includes(value);
 }
 
 function isWcagLevel(value: string): value is WcagLevel {
   return (WCAG_LEVELS as string[]).includes(value);
+}
+
+export function validateFileConfig(config: FileConfig): void {
+  if (config.failOn !== undefined && !isSeverity(config.failOn)) {
+    throw new Error(
+      `.plaina11yrc.json: "failOn" must be one of ${SEVERITY_ORDER.join(", ")}, got "${config.failOn}"`,
+    );
+  }
+  if (config.wcagLevel !== undefined && config.wcagLevel !== null && !isWcagLevel(config.wcagLevel)) {
+    throw new Error(
+      `.plaina11yrc.json: "wcagLevel" must be one of ${WCAG_LEVELS.join(", ")}, got "${config.wcagLevel}"`,
+    );
+  }
+  if (config.timeout !== undefined) {
+    const value = config.timeout;
+    if (typeof value !== "number" || Number.isNaN(value) || value <= 0) {
+      throw new Error(`.plaina11yrc.json: "timeout" must be a positive number of milliseconds, got ${JSON.stringify(value)}`);
+    }
+  }
+  if (config.ignore !== undefined && (!Array.isArray(config.ignore) || !config.ignore.every((v) => typeof v === "string"))) {
+    throw new Error(`.plaina11yrc.json: "ignore" must be an array of rule id strings`);
+  }
+  if (
+    config.categories !== undefined &&
+    (!Array.isArray(config.categories) || !config.categories.every((v) => typeof v === "string"))
+  ) {
+    throw new Error(`.plaina11yrc.json: "categories" must be an array of category name strings`);
+  }
+  if (config.json !== undefined && typeof config.json !== "boolean") {
+    throw new Error(`.plaina11yrc.json: "json" must be true or false`);
+  }
+  if (config.verbose !== undefined && typeof config.verbose !== "boolean") {
+    throw new Error(`.plaina11yrc.json: "verbose" must be true or false`);
+  }
+  if (config.color !== undefined && typeof config.color !== "boolean") {
+    throw new Error(`.plaina11yrc.json: "color" must be true or false`);
+  }
+}
+
+async function loadConfigFile(): Promise<FileConfig> {
+  const path = resolve(process.cwd(), ".plaina11yrc.json");
+  let parsed: FileConfig;
+  try {
+    const raw = await readFile(path, "utf-8");
+    parsed = JSON.parse(raw) as FileConfig;
+  } catch (err) {
+    if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") return {};
+    throw new Error(`couldn't read .plaina11yrc.json: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  validateFileConfig(parsed);
+  return parsed;
 }
 
 export function printHelp() {

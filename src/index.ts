@@ -41,19 +41,21 @@ async function main() {
     process.exit(0);
   }
 
-  let targets: string[];
-  try {
-    targets = config.urls.map(normalizeUrl);
-  } catch {
-    console.error("One of the URLs isn't valid. Include the protocol, e.g. https://example.com");
-    process.exit(1);
-  }
-
   const browser = await chromium.launch();
   let shouldFail = false;
   const jsonResults: unknown[] = [];
+  const scannedTargets: string[] = [];
 
-  for (const target of targets) {
+  for (const rawUrl of config.urls) {
+    let target: string;
+    try {
+      target = normalizeUrl(rawUrl);
+    } catch {
+      console.error(`"${rawUrl}" isn't a valid URL. Include the protocol, e.g. https://example.com`);
+      shouldFail = true;
+      continue;
+    }
+
     let violations;
     try {
       violations = await scanUrl(browser, target, config.timeout);
@@ -62,6 +64,8 @@ async function main() {
       shouldFail = true;
       continue;
     }
+
+    scannedTargets.push(target);
 
     violations = filterViolations(violations, {
       ignore: config.ignore,
@@ -83,7 +87,7 @@ async function main() {
   await browser.close();
 
   if (config.json) {
-    console.log(JSON.stringify(targets.length === 1 ? jsonResults[0] : jsonResults, null, 2));
+    console.log(JSON.stringify(scannedTargets.length === 1 ? jsonResults[0] : jsonResults, null, 2));
   }
 
   process.exit(shouldFail ? 1 : 0);
