@@ -12,20 +12,21 @@ function normalizeUrl(input: string): string {
   return new URL(input).toString();
 }
 
-async function scanUrl(browser: import("playwright").Browser, url: string, timeout: number) {
+export async function scanUrl(browser: import("playwright").Browser, url: string, timeout: number) {
   const context = await browser.newContext();
-  const page = await context.newPage();
-
   try {
-    await page.goto(url, { waitUntil: "load", timeout });
-  } catch (err) {
-    await context.close();
-    throw new Error(`Couldn't load ${url}: ${(err as Error).message}`);
-  }
+    const page = await context.newPage();
+    try {
+      await page.goto(url, { waitUntil: "load", timeout });
+    } catch (err) {
+      throw new Error(`Couldn't load ${url}: ${(err as Error).message}`);
+    }
 
-  const results = await new AxeBuilder({ page }).analyze();
-  await context.close();
-  return results.violations;
+    const results = await new AxeBuilder({ page }).analyze();
+    return results.violations;
+  } finally {
+    await context.close();
+  }
 }
 
 async function main() {
