@@ -1,5 +1,7 @@
 import { chromium } from "playwright";
 import { AxeBuilder } from "@axe-core/playwright";
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { parseArgs } from "./config.js";
 import {
   filterViolations,
@@ -94,7 +96,12 @@ async function main() {
   process.exit(shouldFail ? 1 : 0);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+const isDirectlyExecuted =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isDirectlyExecuted) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
